@@ -1,4 +1,4 @@
-name: Android APK (IP test + HTTPS site)
+name: Android APK - Google HTTPS
 on:
   workflow_dispatch:
   push:
@@ -7,16 +7,8 @@ permissions:
   contents: read
 
 jobs:
-  debug-apk:
-    name: Build ${{ matrix.variant }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: IP-HTTP-Test
-            site_url: http://212.220.99.132:5761/
-          - variant: Website-HTTPS
-            site_url: https://morkovkionline.ru/
+  google-https-apk:
+    name: Build Google HTTPS test APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,10 +30,10 @@ jobs:
           echo "Using SDK manager: $SDKMANAGER"
           (yes | "$SDKMANAGER" --licenses > /dev/null) || true
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug "-PsiteUrl=${{ matrix.site_url }}"
+      - name: Assemble Google HTTPS APK
+        run: ./gradlew --no-daemon assembleDebug "-PsiteUrl=https://morkovkionline.ru/"
       - uses: actions/upload-artifact@v4
         with:
-          name: Morkovki-${{ matrix.variant }}-Debug-APK
+          name: Morkovki-Google-HTTPS-Debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

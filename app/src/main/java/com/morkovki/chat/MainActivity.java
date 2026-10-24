@@ -69,13 +69,15 @@ public final class MainActivity extends Activity {
     private static final Uri SITE_URI = Uri.parse(BuildConfig.SITE_URL);
     private static final String SITE_HOST = SITE_URI.getHost();
     private static final boolean IS_HTTPS_SITE = "https".equalsIgnoreCase(SITE_URI.getScheme());
-    private static final String START_URL = BuildConfig.SITE_URL;
+    private static final String START_URL = IS_HTTPS_SITE
+            ? BuildConfig.SITE_URL + "chat" : BuildConfig.SITE_URL;
     private static final int FILE_CHOOSER_REQUEST = 4207;
     private static final int MEDIA_PERMISSION_REQUEST = 4208;
     private static final int DOWNLOAD_PERMISSION_REQUEST = 4209;
 
     private WebView webView;
     private Button googleLoginButton;
+    private boolean nativeGoogleBridgeAvailable;
     private FrameLayout contentRoot;
     private WebViewAssetLoader assetLoader;
     private ValueCallback<Uri[]> pendingFileChooser;
@@ -242,7 +244,10 @@ public final class MainActivity extends Activity {
                         return false;
                     }
                     if (request.isForMainFrame() && isGoogleAuthUrl(uri)) {
-                        beginNativeGoogleFromUi();
+                        // Use the on-device picker only when the site's HTTPS bridge is ready.
+                        // Otherwise preserve its existing browser-based OAuth flow.
+                        if (nativeGoogleBridgeAvailable) beginNativeGoogleFromUi();
+                        else openExternalUri(uri);
                         return true;
                     }
                     // Open other origins externally rather than giving them WebView access.
@@ -282,14 +287,25 @@ public final class MainActivity extends Activity {
 
     private void updateLoginButtonVisibility() {
         if (googleLoginButton == null || webView == null || !isSiteLoaded()) return;
-        // The floating Google shortcut must never cover friends/chat action buttons.
-        // Only show it while a sign-in form is on screen.
-        String js = "(function(){var t=document.title||'';"
-                + "var loginForm=!!document.querySelector('input[type=password],input[type=email]');"
-                + "var titleMatch=/(вход|авторизац|sign.in|log.in)/i.test(t);"
-                + "return loginForm||titleMatch;})()";
-        webView.evaluateJavascript(js, result ->
-                googleLoginButton.setVisibility("true".equals(result) ? View.VISIBLE : View.GONE));
+        // Do not cover friends, chats or other controls with the floating button.
+        // A hidden sign-in form still exists in many single-page apps.
+        String js = "(function(){"
+                + "function ready(w){return typeof w.__morkovkiNativeGoogleStart==='function'"
+                + "||typeof w.__morkovkiNativeGoogleComplete==='function'}"
+                + "var bridge=ready(window),f=document.querySelector('iframe');"
+                + "try{if(f&&f.contentWindow&&f.contentWindow.location.origin===location.origin)"
+                + "bridge=bridge||ready(f.contentWindow)}catch(e){}"
+                + "if(!bridge)return false;"
+                + "var items=document.querySelectorAll('input[type=password],input[type=email]');"
+                + "for(var i=0;i<items.length;i++){var el=items[i];"
+                + "if(el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden')"
+                + "return true;}"
+                + "return false;})()";
+        webView.evaluateJavascript(js, result -> {
+            nativeGoogleBridgeAvailable = "true".equals(result);
+            googleLoginButton.setVisibility(nativeGoogleBridgeAvailable
+                    ? View.VISIBLE : View.GONE);
+        });
     }
 
     @Override
