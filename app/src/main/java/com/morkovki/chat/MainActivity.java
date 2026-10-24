@@ -87,13 +87,19 @@ public final class MainActivity extends Activity {
     private View fullscreenCustomView;
     private WebChromeClient.CustomViewCallback fullscreenCustomViewCallback;
     private String pendingSharedText;
+    private int safeTopInset;
+    private int safeRightInset;
+    private int keyboardHeight;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         Window window = getWindow();
+        // Draw edge-to-edge while explicitly reserving room for IME and system bars.
+        WindowCompat.setDecorFitsSystemWindows(window, false);
         window.setStatusBarColor(Color.rgb(18, 26, 41));
         window.setNavigationBarColor(Color.rgb(18, 26, 41));
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         try {
             credentialManager = CredentialManager.create(this);
@@ -128,15 +134,35 @@ public final class MainActivity extends Activity {
                 googleParams.topMargin = margin;
                 googleParams.rightMargin = margin;
                 contentRoot.addView(googleLoginButton, googleParams);
+                googleLoginButton.setVisibility(View.GONE);
             }
 
             setContentView(contentRoot);
             ViewCompat.setOnApplyWindowInsetsListener(contentRoot, (view, windowInsets) -> {
-                Insets safeInsets = windowInsets.getInsets(
+                Insets safe = windowInsets.getInsets(
                         WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
+                boolean showingKeyboard = windowInsets.isVisible(WindowInsetsCompat.Type.ime());
+                int bottom = showingKeyboard ? Math.max(safe.bottom, ime.bottom) : safe.bottom;
+                keyboardHeight = showingKeyboard ? Math.max(0, ime.bottom - safe.bottom) : 0;
+                safeTopInset = safe.top;
+                safeRightInset = safe.right;
+
                 FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) webView.getLayoutParams();
-                params.setMargins(safeInsets.left, safeInsets.top, safeInsets.right, safeInsets.bottom);
-                webView.setLayoutParams(params);
+                if (params.leftMargin != safe.left || params.topMargin != safe.top
+                        || params.rightMargin != safe.right || params.bottomMargin != bottom) {
+                    params.setMargins(safe.left, safe.top, safe.right, bottom);
+                    webView.setLayoutParams(params);
+                }
+                if (googleLoginButton != null) {
+                    FrameLayout.LayoutParams loginParams =
+                            (FrameLayout.LayoutParams) googleLoginButton.getLayoutParams();
+                    int margin = (int) (12 * getResources().getDisplayMetrics().density);
+                    loginParams.topMargin = safe.top + margin;
+                    loginParams.rightMargin = safe.right + margin;
+                    googleLoginButton.setLayoutParams(loginParams);
+                }
+                updateResponsivePage();
                 return WindowInsetsCompat.CONSUMED;
             });
             ViewCompat.requestApplyInsets(contentRoot);
@@ -146,8 +172,14 @@ public final class MainActivity extends Activity {
             settings.setDomStorageEnabled(true);
             settings.setDefaultTextEncodingName("UTF-8");
             settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-            settings.setLoadWithOverviewMode(true);
-            settings.setUseWideViewPort(true);
+            settings.setLoadWithOverviewMode(false);
+            settings.setUseWideViewPort(false);
+            settings.setSupportZoom(false);
+            settings.setTextZoom(100);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Allow Android password managers to offer saved email/password credentials.
+                webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_YES);
+            }
             settings.setAllowFileAccess(false);
             settings.setAllowContentAccess(false);
             settings.setMediaPlaybackRequiresUserGesture(true);
@@ -227,6 +259,9 @@ public final class MainActivity extends Activity {
 
                 @Override
                 public void onPageFinished(WebView view, String url) {
+                    updateResponsivePage();
+                    updateLoginButtonVisibility();
+                    CookieManager.getInstance().flush();
                     if (pendingSharedText != null && isSiteLoaded()) {
                         deliverPendingSharedText();
                     }
@@ -237,6 +272,33 @@ public final class MainActivity extends Activity {
         } catch (RuntimeException exception) {
             showLaunchError();
         }
+    }
+
+    private void updateResponsivePage() {
+        if (webView == null || !isSiteLoaded()) return;
+        // Safe, idempotent CSS scoped to Android WebView and small portrait screens.
+        webView.evaluateJavascript("(function(){try{\n var doc=document,root=doc.documentElement;\n if(!root||!doc.head)return;\n var s=doc.getElementById('morkovki-android-mobile-css');\n if(!s){s=doc.createElement('style');s.id='morkovki-android-mobile-css';s.textContent=\"/* Mobile WebView-only adjustments. Do not modify the server's page. */\\nhtml,body{max-width:100%;overflow-x:hidden}\\ninput,textarea,[contenteditable=\\\"true\\\"]{font-size:16px}\\n@media(max-width:600px){\\n  html,body{width:100%;min-width:0}\\n  .app-shell{height:100dvh;min-height:0;max-height:100dvh}\\n  .conversation,.messages,.list-pane{min-height:0}\\n  .composer-wrap{flex-shrink:0}\\n  header,[class*=\\\"header\\\"],[class*=\\\"Header\\\"],[class*=\\\"toolbar\\\"],[class*=\\\"Toolbar\\\"]{box-sizing:border-box;max-width:100%;min-width:0}\\n  header > *,[class*=\\\"header\\\"] > *,[class*=\\\"Header\\\"] > *{min-width:0}\\n  header button,header a,[class*=\\\"header\\\"] button,[class*=\\\"Header\\\"] button{flex-shrink:0}\\n  [class*=\\\"header\\\"] [class*=\\\"title\\\"],[class*=\\\"Header\\\"] [class*=\\\"Title\\\"]{min-width:0;overflow:hidden;text-overflow:ellipsis}\\n  [class*=\\\"actions\\\"],[class*=\\\"Actions\\\"]{flex-shrink:0}\\n}\";doc.head.appendChild(s);}\n function sync(){\n   var viewport=window.visualViewport;\n   var height=viewport?viewport.height:window.innerHeight;\n   root.style.setProperty('--morkovki-viewport-height',Math.round(height)+'px');\n }\n sync();\n if(!window.__morkovkiViewportListeners){\n   window.__morkovkiViewportListeners=true;\n   if(window.visualViewport)window.visualViewport.addEventListener('resize',sync);\n   window.addEventListener('resize',sync);\n   doc.addEventListener('focusin',function(e){\n     var t=e.target;\n     if(t&&(/^(INPUT|TEXTAREA)$/.test(t.tagName)||t.isContentEditable)){\n       window.setTimeout(function(){try{t.scrollIntoView({block:'nearest',inline:'nearest'});}catch(_e){}},210);\n     }\n   },true);\n }\n }catch(_e){}})()", null);
+    }
+
+    private void updateLoginButtonVisibility() {
+        if (googleLoginButton == null || webView == null || !isSiteLoaded()) return;
+        // The floating Google shortcut must never cover friends/chat action buttons.
+        // Only show it while a sign-in form is on screen.
+        String js = "(function(){var t=document.title||'';"
+                + "var loginForm=!!document.querySelector('input[type=password],input[type=email]');"
+                + "var titleMatch=/(вход|авторизац|sign.in|log.in)/i.test(t);"
+                + "return loginForm||titleMatch;})()";
+        webView.evaluateJavascript(js, result ->
+                googleLoginButton.setVisibility("true".equals(result) ? View.VISIBLE : View.GONE));
+    }
+
+    @Override
+    protected void onPause() {
+        if (webView != null) {
+            // Persist the site's secure session cookie across app launches.
+            CookieManager.getInstance().flush();
+        }
+        super.onPause();
     }
 
     private boolean isTrustedAppUri(Uri uri) {
