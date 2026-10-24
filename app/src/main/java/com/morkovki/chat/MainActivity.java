@@ -30,6 +30,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.URLUtil;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -59,6 +60,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.security.SecureRandom;
+import android.util.Base64;
 import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
@@ -72,6 +75,7 @@ public final class MainActivity extends Activity {
     private static final int DOWNLOAD_PERMISSION_REQUEST = 4209;
 
     private WebView webView;
+    private Button googleLoginButton;
     private FrameLayout contentRoot;
     private WebViewAssetLoader assetLoader;
     private ValueCallback<Uri[]> pendingFileChooser;
@@ -110,6 +114,21 @@ public final class MainActivity extends Activity {
             contentRoot.setBackgroundColor(Color.rgb(18, 26, 41));
             contentRoot.addView(webView, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            if (IS_HTTPS_SITE) {
+                googleLoginButton = new Button(this);
+                googleLoginButton.setAllCaps(false);
+                googleLoginButton.setText("Войти Google");
+                googleLoginButton.setTextSize(12);
+                googleLoginButton.setContentDescription("Выбрать аккаунт Google с телефона");
+                googleLoginButton.setOnClickListener(v -> beginNativeGoogleFromUi());
+                int margin = (int) (12 * getResources().getDisplayMetrics().density);
+                FrameLayout.LayoutParams googleParams = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.TOP | Gravity.END);
+                googleParams.topMargin = margin;
+                googleParams.rightMargin = margin;
+                contentRoot.addView(googleLoginButton, googleParams);
+            }
 
             setContentView(contentRoot);
             ViewCompat.setOnApplyWindowInsetsListener(contentRoot, (view, windowInsets) -> {
@@ -190,6 +209,10 @@ public final class MainActivity extends Activity {
                     if (isTrustedAppUri(uri)) {
                         return false;
                     }
+                    if (request.isForMainFrame() && isGoogleAuthUrl(uri)) {
+                        beginNativeGoogleFromUi();
+                        return true;
+                    }
                     // Open other origins externally rather than giving them WebView access.
                     openExternalUri(uri);
                     return true;
@@ -227,6 +250,50 @@ public final class MainActivity extends Activity {
 
     private boolean isTrustedMediaOrigin(Uri origin) {
         return IS_HTTPS_SITE && isTrustedAppUri(origin);
+    }
+
+    private boolean isGoogleAuthUrl(Uri uri) {
+        return uri != null && "https".equalsIgnoreCase(uri.getScheme())
+                && "accounts.google.com".equalsIgnoreCase(uri.getHost());
+    }
+
+    // Account choice is handled by Google Play services, not by a web browser.
+    // The site's JavaScript must supply a signed-in session after native Google completes.
+    private void beginNativeGoogleFromUi() {
+        if (!IS_HTTPS_SITE || !isSiteLoaded() || webView == null) {
+            Toast.makeText(this, "Для входа через Google требуется HTTPS-версия приложения.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        String probe = "(function(){try{var candidates=[window],f=document.querySelector('iframe');"
+                + "try{if(f&&f.contentWindow&&f.contentWindow.location.origin===location.origin)"
+                + "candidates.unshift(f.contentWindow)}catch(e){}"
+                + "for(var i=0;i<candidates.length;i++){var w=candidates[i];"
+                + "if(typeof w.__morkovkiNativeGoogleStart==='function'){"
+                + "w.__morkovkiNativeGoogleStart();return 'delegated'}"
+                + "if(typeof w.__morkovkiNativeGoogleComplete==='function')return 'ready'}"
+                + "return 'unsupported'}catch(e){return 'unsupported'}})()";
+        webView.evaluateJavascript(probe, result -> {
+            if (!isSiteLoaded()) return;
+            if ("\"delegated\"".equals(result)) return;
+            if (!"\"ready\"".equals(result)) {
+                Toast.makeText(this,
+                        "Сайт пока не поддерживает вход Google через Android.",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+            // Compatibility mode for sites with a Complete callback but no Start callback.
+            byte[] random = new byte[32];
+            new SecureRandom().nextBytes(random);
+            String nonce = Base64.encodeToString(random, Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
+            String script = "(function(){var n=" + JSONObject.quote(nonce)
+                    + ";dispatchEvent(new CustomEvent('morkovki-native-google-start',{detail:{nonce:n}}));"
+                    + "var f=document.querySelector('iframe');try{"
+                    + "if(f&&f.contentWindow&&f.contentWindow.location.origin===location.origin)"
+                    + "f.contentWindow.dispatchEvent(new CustomEvent('morkovki-native-google-start',"
+                    + "{detail:{nonce:n}}))}catch(e){}})()";
+            webView.evaluateJavascript(script, ignored -> startGoogleSignIn(nonce));
+        });
     }
 
     private void handleWebPermissionRequest(PermissionRequest request) {
@@ -392,6 +459,7 @@ public final class MainActivity extends Activity {
         fullscreenCustomView = view;
         fullscreenCustomViewCallback = callback;
         webView.setVisibility(View.GONE);
+        if (googleLoginButton != null) googleLoginButton.setVisibility(View.GONE);
         contentRoot.addView(view, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -405,6 +473,7 @@ public final class MainActivity extends Activity {
         contentRoot.removeView(fullscreenCustomView);
         fullscreenCustomView = null;
         webView.setVisibility(View.VISIBLE);
+        if (googleLoginButton != null) googleLoginButton.setVisibility(View.VISIBLE);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         WindowCompat.getInsetsController(getWindow(), contentRoot).show(WindowInsetsCompat.Type.systemBars());
         WebChromeClient.CustomViewCallback callback = fullscreenCustomViewCallback;
@@ -488,11 +557,21 @@ public final class MainActivity extends Activity {
     }
 
     private void evaluateInChatFrame(String functionName, String argument) {
-        if (webView == null) return;
+        if (webView == null || !IS_HTTPS_SITE || !isSiteLoaded()) return;
         String call = "w." + functionName + "(" + (argument == null ? "" : JSONObject.quote(argument)) + ")";
-        String script = "(function(){var frame=document.querySelector('iframe');var w=frame&&frame.contentWindow;"
-                + "if(w&&typeof w." + functionName + "==='function'){" + call + ";}})();";
-        webView.evaluateJavascript(script, null);
+        // Never send the Google ID token to a cross-origin iframe.
+        String script = "(function(){var list=[window],f=document.querySelector('iframe');"
+                + "try{if(f&&f.contentWindow&&f.contentWindow.location.origin===location.origin)"
+                + "list.unshift(f.contentWindow)}catch(e){}"
+                + "for(var i=0;i<list.length;i++){var w=list[i];"
+                + "if(typeof w." + functionName + "==='function'){" + call + ";return true;}}"
+                + "return false;})()";
+        webView.evaluateJavascript(script, result -> {
+            if ("__morkovkiNativeGoogleComplete".equals(functionName) && !"true".equals(result)) {
+                Toast.makeText(this, "Сайт ещё не завершает вход Google из приложения.",
+                        Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private final class MorkovkiAndroidBridge {
