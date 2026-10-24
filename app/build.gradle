@@ -41,8 +41,8 @@ android {
         applicationId 'ru.morkovki.chat'
         minSdk 24
         targetSdk 35
-        versionCode 18
-        versionName '1.8.5'
+        versionCode 19
+        versionName '1.8.6'
         buildConfigField 'String', 'SITE_URL', "\"${escapedSiteUrl}\""
     }
 

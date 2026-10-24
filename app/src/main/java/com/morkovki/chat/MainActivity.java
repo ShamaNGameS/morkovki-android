@@ -53,6 +53,10 @@ import androidx.webkit.WebViewAssetLoader;
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.io.File;
 import java.util.Collections;
 import java.util.ArrayList;
@@ -266,6 +270,7 @@ public final class MainActivity extends Activity {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     updateResponsivePage();
+                    installFriendsMobileFix();
                     updateLoginButtonVisibility();
                     CookieManager.getInstance().flush();
                     if (pendingSharedText != null && isSiteLoaded()) {
@@ -284,6 +289,22 @@ public final class MainActivity extends Activity {
         if (webView == null || !isSiteLoaded()) return;
         // Safe, idempotent CSS scoped to Android WebView and small portrait screens.
         webView.evaluateJavascript("(function(){try{\n var doc=document,root=doc.documentElement;\n if(!root||!doc.head)return;\n var s=doc.getElementById('morkovki-android-mobile-css');\n if(!s){s=doc.createElement('style');s.id='morkovki-android-mobile-css';s.textContent=\"/* Mobile WebView-only adjustments. Do not modify the server's page. */\\nhtml,body{max-width:100%;overflow-x:hidden}\\ninput,textarea,[contenteditable=\\\"true\\\"]{font-size:16px}\\n@media(max-width:600px){\\n  html,body{width:100%;min-width:0}\\n  .app-shell{height:100dvh;min-height:0;max-height:100dvh}\\n  .conversation,.messages,.list-pane{min-height:0}\\n  .composer-wrap{flex-shrink:0}\\n  header,[class*=\\\"header\\\"],[class*=\\\"Header\\\"],[class*=\\\"toolbar\\\"],[class*=\\\"Toolbar\\\"]{box-sizing:border-box;max-width:100%;min-width:0}\\n  header > *,[class*=\\\"header\\\"] > *,[class*=\\\"Header\\\"] > *{min-width:0}\\n  header button,header a,[class*=\\\"header\\\"] button,[class*=\\\"Header\\\"] button{flex-shrink:0}\\n  [class*=\\\"header\\\"] [class*=\\\"title\\\"],[class*=\\\"Header\\\"] [class*=\\\"Title\\\"]{min-width:0;overflow:hidden;text-overflow:ellipsis}\\n  [class*=\\\"actions\\\"],[class*=\\\"Actions\\\"]{flex-shrink:0}\\n}\";doc.head.appendChild(s);}\n function sync(){\n   var viewport=window.visualViewport;\n   var height=viewport?viewport.height:window.innerHeight;\n   root.style.setProperty('--morkovki-viewport-height',Math.round(height)+'px');\n }\n sync();\n if(!window.__morkovkiViewportListeners){\n   window.__morkovkiViewportListeners=true;\n   if(window.visualViewport)window.visualViewport.addEventListener('resize',sync);\n   window.addEventListener('resize',sync);\n   doc.addEventListener('focusin',function(e){\n     var t=e.target;\n     if(t&&(/^(INPUT|TEXTAREA)$/.test(t.tagName)||t.isContentEditable)){\n       window.setTimeout(function(){try{t.scrollIntoView({block:'nearest',inline:'nearest'});}catch(_e){}},210);\n     }\n   },true);\n }\n }catch(_e){}})()", null);
+    }
+
+    private void installFriendsMobileFix() {
+        if (webView == null || !isSiteLoaded()) return;
+        // Uses only existing website add-friend actions; no guessed API endpoints.
+        try (InputStream input = getAssets().open("friends-mobile-fix.js");
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] chunk = new byte[4096];
+            int count;
+            while ((count = input.read(chunk)) != -1) {
+                output.write(chunk, 0, count);
+            }
+            webView.evaluateJavascript(new String(output.toByteArray(), StandardCharsets.UTF_8), null);
+        } catch (IOException error) {
+            Log.w("MorkovkiUI", "Friends mobile fix asset is unavailable", error);
+        }
     }
 
     private void updateLoginButtonVisibility() {
