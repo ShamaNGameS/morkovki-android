@@ -1,14 +1,22 @@
-name: Android APK
+name: Android APK (IP test + HTTPS site)
 on:
   workflow_dispatch:
   push:
     branches: [main]
-
 permissions:
   contents: read
 
 jobs:
   debug-apk:
+    name: Build ${{ matrix.variant }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: IP-HTTP-Test
+            site_url: http://212.220.99.132:5761/
+          - variant: Website-HTTPS
+            site_url: https://morkovkionline.ru/
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +25,6 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
       - name: Install Android SDK packages
         shell: bash
         run: |
@@ -33,9 +39,9 @@ jobs:
           (yes | "$SDKMANAGER" --licenses > /dev/null) || true
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
       - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+        run: ./gradlew --no-daemon assembleDebug "-PsiteUrl=${{ matrix.site_url }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: Morkovki-Android-Debug-APK
+          name: Morkovki-${{ matrix.variant }}-Debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

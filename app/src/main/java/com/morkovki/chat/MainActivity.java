@@ -65,6 +65,7 @@ public final class MainActivity extends Activity {
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     private static final Uri SITE_URI = Uri.parse(BuildConfig.SITE_URL);
     private static final String SITE_HOST = SITE_URI.getHost();
+    private static final boolean IS_HTTPS_SITE = "https".equalsIgnoreCase(SITE_URI.getScheme());
     private static final String START_URL = BuildConfig.SITE_URL;
     private static final int FILE_CHOOSER_REQUEST = 4207;
     private static final int MEDIA_PERMISSION_REQUEST = 4208;
@@ -101,7 +102,10 @@ public final class MainActivity extends Activity {
             webView.setBackgroundColor(Color.rgb(18, 26, 41));
             webView.setFitsSystemWindows(false);
             webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-            webView.addJavascriptInterface(new MorkovkiAndroidBridge(), "MorkovkiAndroid");
+            // Native Google auth and clipboard bridge are unavailable over insecure HTTP.
+            if (IS_HTTPS_SITE) {
+                webView.addJavascriptInterface(new MorkovkiAndroidBridge(), "MorkovkiAndroid");
+            }
             contentRoot = new FrameLayout(this);
             contentRoot.setBackgroundColor(Color.rgb(18, 26, 41));
             contentRoot.addView(webView, new FrameLayout.LayoutParams(
@@ -176,15 +180,17 @@ public final class MainActivity extends Activity {
                     if (local != null) {
                         return local;
                     }
-                    return "https".equals(uri.getScheme()) ? null : blockedResponse();
+                    return ("https".equalsIgnoreCase(uri.getScheme())
+                            || (!IS_HTTPS_SITE && isTrustedAppUri(uri))) ? null : blockedResponse();
                 }
 
                 @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     Uri uri = request.getUrl();
-                    if ("https".equalsIgnoreCase(uri.getScheme())) {
+                    if (isTrustedAppUri(uri)) {
                         return false;
                     }
+                    // Open other origins externally rather than giving them WebView access.
                     openExternalUri(uri);
                     return true;
                 }
@@ -212,12 +218,15 @@ public final class MainActivity extends Activity {
 
     private boolean isTrustedAppUri(Uri uri) {
         return uri != null
-                && "https".equalsIgnoreCase(uri.getScheme())
-                && SITE_HOST.equalsIgnoreCase(uri.getHost());
+                && SITE_URI.getScheme() != null
+                && SITE_URI.getScheme().equalsIgnoreCase(uri.getScheme())
+                && SITE_HOST != null
+                && SITE_HOST.equalsIgnoreCase(uri.getHost())
+                && SITE_URI.getPort() == uri.getPort();
     }
 
     private boolean isTrustedMediaOrigin(Uri origin) {
-        return isTrustedAppUri(origin);
+        return IS_HTTPS_SITE && isTrustedAppUri(origin);
     }
 
     private void handleWebPermissionRequest(PermissionRequest request) {
@@ -419,7 +428,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startGoogleSignIn(String nonce) {
-        if (!isSiteLoaded() || nonce == null || !nonce.matches("[A-Za-z0-9_-]{43}")) {
+        if (!IS_HTTPS_SITE || !isSiteLoaded() || nonce == null || !nonce.matches("[A-Za-z0-9_-]{43}")) {
             notifyGoogleSignInFailure("Не удалось начать защищённый вход Google. Обновите страницу и попробуйте ещё раз.");
             return;
         }
@@ -512,7 +521,7 @@ public final class MainActivity extends Activity {
 
     private void showLaunchError() {
         TextView message = new TextView(this);
-        message.setText("Не удалось открыть приложение.\nОбновите Android System WebView в Google Play и попробуйте снова.");
+        message.setText("Не удалось открыть Морковки.\nПроверьте подключение к серверу: " + START_URL + "\nОбновите Android System WebView, если проблема повторяется.");
         message.setTextColor(Color.WHITE);
         message.setTextSize(16);
         message.setGravity(Gravity.CENTER);

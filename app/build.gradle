@@ -4,7 +4,7 @@ plugins {
     id 'com.android.application'
 }
 
-def defaultSiteUrl = 'https://morkovki-online-test-23oct.loca.lt/'
+def defaultSiteUrl = 'https://morkovkionline.ru/'
 def configuredSiteUrl = providers.gradleProperty('siteUrl').orElse(defaultSiteUrl).get().trim()
 def parsedSiteUrl
 try {
@@ -12,15 +12,19 @@ try {
 } catch (Exception exception) {
     throw new GradleException("Invalid -PsiteUrl value: ${configuredSiteUrl}", exception)
 }
-if (!'https'.equalsIgnoreCase(parsedSiteUrl.scheme)
+def isHttpsSite = 'https'.equalsIgnoreCase(parsedSiteUrl.scheme)
+def isHttpIpTest = 'http'.equalsIgnoreCase(parsedSiteUrl.scheme)
+        && parsedSiteUrl.host == '212.220.99.132'
+        && parsedSiteUrl.port == 5761
+if (!(isHttpsSite || isHttpIpTest)
         || !parsedSiteUrl.host
         || parsedSiteUrl.rawUserInfo
         || parsedSiteUrl.query
         || parsedSiteUrl.fragment
         || (parsedSiteUrl.path && parsedSiteUrl.path != '/')) {
-    throw new GradleException('siteUrl must be an HTTPS origin, for example https://chat.example.com/')
+    throw new GradleException('siteUrl must be an HTTPS origin, or the test address http://212.220.99.132:5761/')
 }
-def siteUrl = "https://${parsedSiteUrl.rawAuthority}/"
+def siteUrl = "${parsedSiteUrl.scheme.toLowerCase(java.util.Locale.ROOT)}://${parsedSiteUrl.rawAuthority}/"
 def escapedSiteUrl = siteUrl.replace('\\', '\\\\').replace('"', '\\"')
 def localDebugKeystore = rootProject.file('signing/android-debug.keystore')
 def hasLocalDebugKeystore = localDebugKeystore.isFile()
@@ -37,8 +41,8 @@ android {
         applicationId 'ru.morkovki.chat'
         minSdk 24
         targetSdk 35
-        versionCode 13
-        versionName '1.8.0'
+        versionCode 14
+        versionName '1.8.1'
         buildConfigField 'String', 'SITE_URL', "\"${escapedSiteUrl}\""
     }
 

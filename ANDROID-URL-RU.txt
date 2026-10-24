@@ -1,11 +1,15 @@
-Морковки на связи — настройка Android-сборки
+Морковки на связи — настройка Android-сборки 1.8.1
 
-По умолчанию приложение открывает текущий HTTPS-сайт: https://morkovki-online-test-23oct.loca.lt/. Другой HTTPS-адрес можно передать при сборке параметром Gradle siteUrl.
+GitHub Actions создаёт:
+1) Morkovki-IP-HTTP-Test-Debug-APK: http://212.220.99.132:5761/
+2) Morkovki-Website-HTTPS-Debug-APK: https://morkovkionline.ru/
 
-PowerShell:
-.\gradlew.bat --no-daemon assembleDebug -PsiteUrl=https://chat.example.com/
+Из PowerShell:
+.\gradlew.bat --no-daemon assembleDebug -PsiteUrl=http://212.220.99.132:5761/
+.\gradlew.bat --no-daemon assembleDebug -PsiteUrl=https://morkovkionline.ru/
 
-Готовый APK:
-app\build\outputs\apk\debug\app-debug.apk
+По умолчанию выбран HTTPS-сайт; произвольные HTTP-адреса запрещены. Для IP-сборки отключён нативный Google Sign-in и мост JavaScript-Android.
 
-Приложение принимает адрес только по HTTPS. Для текущего сайта параметр указывать не требуется.
+ВНИМАНИЕ: HTTP не шифрует трафик, поэтому не передавайте реальные пароли и личные сообщения. Порт должен отдавать HTML-интерфейс для WebView, а не только JSON.
+
+APK находится в app\build\outputs\apk\debug\app-debug.apk.

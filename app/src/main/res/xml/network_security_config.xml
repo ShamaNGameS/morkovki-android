@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <!-- Testing only: allow the specified HTTP server; everything else requires HTTPS. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">212.220.99.132</domain>
+    </domain-config>
+</network-security-config>

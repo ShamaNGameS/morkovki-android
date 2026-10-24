@@ -3,8 +3,8 @@
 .idea/
 local.properties
 *.iml
-signing/
-*.jks
-*.keystore
 *.apk
 *.aab
+signing/
+*.keystore
+*.jks
