@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+
 permissions:
   contents: read
 
@@ -15,12 +16,22 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDKROOT/cmdline-tools" -name sdkmanager -type f | sort -V | tail -n 1)"
+          fi
+          test -n "$SDKMANAGER" || { echo "Cannot find sdkmanager"; exit 1; }
+          echo "Using SDK manager: $SDKMANAGER"
+          (yes | "$SDKMANAGER" --licenses > /dev/null) || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
