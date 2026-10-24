@@ -1,4 +1,4 @@
-# Морковки Онлайн — Android 1.8.4
+# Морковки Онлайн — Android 1.8.5
 
 Android-приложение для `https://morkovkionline.ru/chat`, с поддержкой существующих способов входа сайта (логин/пароль, вход старого аккаунта по почте и Google OAuth).
 
@@ -27,3 +27,18 @@ GitHub Actions теперь собирает **только HTTPS-вариант
 HTTP не используется для авторизации. Не храните ключ подписи APK в GitHub. Если GitHub Actions выпустил APK с другой отладочной подписью, установка поверх старого приложения может не пройти; перед удалением старого приложения сохраните нужные локальные данные.
 
 Исходники сервера сайта не входят в репозиторий `morkovki-android`, поэтому сборка Android APK не доказывает работоспособность серверной Google OAuth-интеграции.
+
+
+## Вход Google: как исправить код ошибки при запуске выбора аккаунта
+
+В версии 1.8.5 для явного нажатия «Войти через Google» используется `GetSignInWithGoogleOption` вместо `GetGoogleIdOption`. Ошибки Credential Manager теперь показывают короткий диагностический код (например `GetCredentialCustomException`) без раскрытия ID-токена. Полный класс/тип ошибки есть в Android Logcat под `MorkovkiGoogle`; токены не логируются.
+
+**Для работы Google-входа одного APK недостаточно.** В Google Cloud > Google Auth Platform > Clients нужен Android OAuth-клиент с пакетом `ru.morkovki.chat` и **SHA-1 именно установленного APK**. Используемый в Android `google_server_client_id` должен совпадать с Web Client ID серверной авторизации; backend должен проверять ID-токен, nonce и создавать сессию только через HTTPS.
+
+GitHub Actions теперь вкладывает в артефакт APK файл `android-oauth-fingerprint.txt` со SHA-1 отладочной подписи. У GitHub runner отладочный ключ меняется между сборками. Поэтому **для стабильного SHA-1** можно один раз создать отдельный тестовый debug keystore (alias `androiddebugkey`, пароль `android`, требуемый Gradle), затем сохранить его *base64-содержимое* как секрет GitHub Actions с точным именем `MORKOVKI_DEBUG_KEYSTORE_BASE64`. Пример для локального компьютера с JDK:
+```bash
+mkdir -p signing
+keytool -genkeypair -storetype PKCS12 -keystore signing/android-debug.keystore -alias androiddebugkey -keyalg RSA -keysize 3072 -validity 3650 -dname "CN=Morkovki Android Debug,O=Morkovki" -storepass android -keypass android
+base64 -w0 signing/android-debug.keystore
+```
+На Windows PowerShell содержимое base64: `[Convert]::ToBase64String([IO.File]::ReadAllBytes('signing/android-debug.keystore'))`. Добавить в GitHub: Settings > Secrets and variables > Actions > New repository secret. **Никогда не коммитьте keystore или base64 в исходники.** После установки секрета выполнить сборку, взять стабильный SHA-1 из её артефакта и зарегистрировать в Google Cloud. Для опубликованного приложения понадобится отдельный защищённый release key.

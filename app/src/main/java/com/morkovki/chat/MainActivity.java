@@ -50,7 +50,7 @@ import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.exceptions.GetCredentialCancellationException;
 import androidx.credentials.exceptions.GetCredentialException;
 import androidx.webkit.WebViewAssetLoader;
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -62,6 +62,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.security.SecureRandom;
 import android.util.Base64;
+import android.util.Log;
 import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
@@ -583,9 +584,10 @@ public final class MainActivity extends Activity {
         googleSignInInProgress = true;
 
         try {
-            GetGoogleIdOption googleOption = new GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(getString(R.string.google_server_client_id))
+            // This is an explicit "Sign in with Google" button, not silent sign-in.
+            // Google's documentation recommends GetSignInWithGoogleOption here.
+            GetSignInWithGoogleOption googleOption = new GetSignInWithGoogleOption.Builder(
+                    getString(R.string.google_server_client_id))
                     .setNonce(nonce)
                     .build();
             GetCredentialRequest request = new GetCredentialRequest.Builder()
@@ -606,13 +608,20 @@ public final class MainActivity extends Activity {
                             if (error instanceof GetCredentialCancellationException) {
                                 evaluateInChatFrame("__morkovkiNativeGoogleCancel", null);
                             } else {
-                                notifyGoogleSignInFailure("Не удалось открыть вход Google. Проверьте Android OAuth-клиент и попробуйте ещё раз.");
+                                Log.e("MorkovkiGoogle", "Google credential failed: "
+                                        + error.getClass().getSimpleName() + " / " + error.getType(), error);
+                                String code = error.getClass().getSimpleName();
+                                if (code.length() > 60) code = code.substring(0, 60);
+                                notifyGoogleSignInFailure("Google-вход не запустился (" + code
+                                        + "). Проверьте Google Play и Android OAuth: пакет ru.morkovki.chat, SHA-1 APK.");
                             }
                         }
                     });
         } catch (RuntimeException exception) {
             googleSignInInProgress = false;
-            notifyGoogleSignInFailure("Не удалось открыть вход Google. Проверьте Android OAuth-клиент и попробуйте ещё раз.");
+            Log.e("MorkovkiGoogle", "Google sign-in request could not start", exception);
+            notifyGoogleSignInFailure("Ошибка Google-входа (" + exception.getClass().getSimpleName()
+                    + "). Проверьте версию Google Play и OAuth-подпись Android APK.");
         }
     }
 

@@ -30,10 +30,36 @@ jobs:
           echo "Using SDK manager: $SDKMANAGER"
           (yes | "$SDKMANAGER" --licenses > /dev/null) || true
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Restore stable Android debug signing key (optional)
+        shell: bash
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.MORKOVKI_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "$SIGNING_KEY_BASE64" ]; then
+            mkdir -p signing
+            printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > signing/android-debug.keystore
+            chmod 600 signing/android-debug.keystore
+            echo "Using stable GitHub secret signing keystore."
+          else
+            echo "::warning::No MORKOVKI_DEBUG_KEYSTORE_BASE64 secret. APK will be signed with an ephemeral GitHub runner key; register the new SHA-1 for this APK or configure a stable key."
+          fi
       - name: Assemble Google HTTPS APK
         run: ./gradlew --no-daemon assembleDebug "-PsiteUrl=https://morkovkionline.ru/"
+      - name: Report APK signing fingerprint
+        shell: bash
+        run: |
+          {
+            echo 'Android package: ru.morkovki.chat'
+            echo 'Website: https://morkovkionline.ru/chat'
+            echo 'Google Auth Platform: create Android OAuth client with package above and SHA-1 from debug variant below'
+            echo
+            ./gradlew --no-daemon signingReport "-PsiteUrl=https://morkovkionline.ru/"
+          } | tee android-oauth-fingerprint.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Morkovki-Google-HTTPS-Debug-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            android-oauth-fingerprint.txt
           if-no-files-found: error
