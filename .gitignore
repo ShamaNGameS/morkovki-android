@@ -1,0 +1,12 @@
+# Android build output
+.gradle/
+**/build/
+.idea/
+local.properties
+*.iml
+*.apk
+*.aab
+# Signing secrets must never be committed
+signing/
+*.keystore
+*.jks

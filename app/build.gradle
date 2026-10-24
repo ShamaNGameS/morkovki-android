@@ -1,0 +1,21 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ru.morkovki.chat'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ru.morkovki.chat'
+        minSdk 24
+        targetSdk 35
+        versionCode 14
+        versionName '1.8.1-ip-test'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
