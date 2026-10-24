@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Морковки на связи</string>
+    <string name="google_server_client_id">1069928356317-cqg65b782atn59s2p58fji6sgf5p41nr.apps.googleusercontent.com</string>
 </resources>

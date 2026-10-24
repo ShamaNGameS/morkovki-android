@@ -1,4 +1,4 @@
-name: Android test APK
+name: Android APK
 on:
   workflow_dispatch:
   push:
@@ -36,6 +36,6 @@ jobs:
         run: gradle --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: Morkovki-IP-Android-Debug-APK
+          name: Morkovki-Android-Debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

@@ -1,0 +1,11 @@
+Морковки на связи — настройка Android-сборки
+
+По умолчанию приложение открывает текущий HTTPS-сайт: https://morkovki-online-test-23oct.loca.lt/. Другой HTTPS-адрес можно передать при сборке параметром Gradle siteUrl.
+
+PowerShell:
+.\gradlew.bat --no-daemon assembleDebug -PsiteUrl=https://chat.example.com/
+
+Готовый APK:
+app\build\outputs\apk\debug\app-debug.apk
+
+Приложение принимает адрес только по HTTPS. Для текущего сайта параметр указывать не требуется.
