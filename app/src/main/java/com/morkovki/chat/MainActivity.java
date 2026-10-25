@@ -276,6 +276,7 @@ public final class MainActivity extends Activity {
                     updateResponsivePage();
                     installFriendsMobileFix();
                     installAndroidUi();
+                    installMobileUxV188();
                     updateLoginButtonVisibility();
                     CookieManager.getInstance().flush();
                     if (pendingSharedText != null && isSiteLoaded()) {
@@ -409,6 +410,19 @@ public final class MainActivity extends Activity {
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
             });
         }, "morkovki-update-check").start();
+    }
+
+    private void installMobileUxV188() {
+        if (webView == null || !isSiteLoaded()) return;
+        try (InputStream in = getAssets().open("mobile-ux-v188.js");
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+            webView.evaluateJavascript(new String(out.toByteArray(), StandardCharsets.UTF_8), null);
+        } catch (IOException error) {
+            Log.w("MorkovkiUI", "Mobile UX asset missing", error);
+        }
     }
 
     private void updateLoginButtonVisibility() {
@@ -880,8 +894,12 @@ public final class MainActivity extends Activity {
         if (backActionPending) return;
         backActionPending = true;
         webView.evaluateJavascript(
-                "(function(){var frame=document.querySelector('iframe');var win=frame&&frame.contentWindow;"
-                        + "return !!(win&&typeof win.__morkovkiAndroidBack==='function'&&win.__morkovkiAndroidBack());})()",
+                "(function(){var list=[window],f=document.querySelector('iframe');"
+                        + "try{if(f&&f.contentWindow&&f.contentWindow.location.origin===location.origin)"
+                        + "list.unshift(f.contentWindow)}catch(e){}"
+                        + "for(var i=0;i<list.length;i++){var w=list[i];"
+                        + "if(w&&typeof w.__morkovkiAndroidBack==='function')return !!w.__morkovkiAndroidBack();}"
+                        + "return false;})()",
                 handled -> {
                     backActionPending = false;
                     if ("true".equals(handled)) return;
