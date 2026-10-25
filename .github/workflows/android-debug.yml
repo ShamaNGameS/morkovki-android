@@ -17,6 +17,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Validate injected mobile JavaScript
+        run: |
+          node --check app/src/main/assets/mobile-ux-v188.js
+          node --check app/src/main/assets/android-ui.js
+          node --check app/src/main/assets/friends-mobile-fix.js
       - name: Install Android SDK packages
         shell: bash
         run: |
