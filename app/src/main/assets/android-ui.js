@@ -15,6 +15,8 @@
     "button,a,input,textarea{touch-action:manipulation}",
     "@media(max-width:720px){",
     " .workspace-nav-btn{min-height:44px}",
+    " #morkovki-android-updates{display:flex;align-items:center;gap:11px;width:auto;min-height:46px;flex:none;margin:auto 14px 8px;padding:0 11px;border:1px solid var(--line);border-radius:12px;background:var(--soft);color:var(--ink);font-size:12px;font-weight:650;text-align:left}",
+    " #profileTabBtn{margin-top:0!important}",
     " .friends-page-heading{display:flex;align-items:center;gap:10px;justify-content:space-between;min-width:0}",
     " .friends-page-heading h2{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     " #friendPageAddBtn{width:44px!important;min-width:44px;min-height:44px;padding:0!important;flex-shrink:0}",
@@ -37,14 +39,21 @@
       doc.head.appendChild(style);
     }
     var nav = doc.querySelector(".workspace-nav");
-    if (nav && !doc.getElementById("morkovki-android-updates")) {
-      var btn = doc.createElement("button");
+    var profile = doc.getElementById("profileTabBtn");
+    var btn = doc.getElementById("morkovki-android-updates");
+    if ((profile || nav) && !btn) {
+      btn = doc.createElement("button");
       btn.type = "button";
       btn.id = "morkovki-android-updates";
       btn.className = "workspace-nav-btn";
       btn.setAttribute("aria-label", "Проверить обновления Android-приложения");
       btn.innerHTML = '<span aria-hidden="true" style="font-size:22px;line-height:1">↻</span><span>Проверить обновления</span>';
       btn.addEventListener("click", function () { api.checkForUpdates(); });
+    }
+    // Place directly above the bottom profile tile; legacy site can fall back to nav.
+    if (profile && btn && (btn.parentNode !== profile.parentNode || btn.nextSibling !== profile)) {
+      profile.parentNode.insertBefore(btn, profile);
+    } else if (!profile && nav && btn && btn.parentNode !== nav) {
       nav.appendChild(btn);
     }
     observe(doc);
