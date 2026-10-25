@@ -4,7 +4,7 @@ Android-приложение для `https://morkovkionline.ru/chat`, с под�
 
 ## Собрать APK в GitHub
 
-Actions → **Android APK - Google HTTPS** → успешный запуск → **Morkovki-Google-HTTPS-Debug-APK** → скачайте архив, распакуйте APK и установите его.
+Actions → **Android APK - Google HTTPS** → успешный запуск → **Morkovki-Online-APK** → скачайте архив, распакуйте APK и установите его.
 
 GitHub Actions теперь собирает **только HTTPS-вариант**. IP/HTTP-вариант временно отложен, но исходный код сетевых настроек не удалён.
 
@@ -35,13 +35,13 @@ HTTP не используется для авторизации. Не хран�
 
 **Для работы Google-входа одного APK недостаточно.** В Google Cloud > Google Auth Platform > Clients нужен Android OAuth-клиент с пакетом `ru.morkovki.chat` и **SHA-1 именно установленного APK**. Используемый в Android `google_server_client_id` должен совпадать с Web Client ID серверной авторизации; backend должен проверять ID-токен, nonce и создавать сессию только через HTTPS.
 
-GitHub Actions теперь вкладывает в артефакт APK файл `android-oauth-fingerprint.txt` со SHA-1 отладочной подписи. У GitHub runner отладочный ключ меняется между сборками. Поэтому **для стабильного SHA-1** можно один раз создать отдельный тестовый debug keystore (alias `androiddebugkey`, пароль `android`, требуемый Gradle), затем сохранить его *base64-содержимое* как секрет GitHub Actions с точным именем `MORKOVKI_DEBUG_KEYSTORE_BASE64`. Пример для локального компьютера с JDK:
+GitHub Actions выводит SHA-1 отладочной подписи в шаге **Report APK signing fingerprint**. Для удобства скачиваемый ZIP содержит только `Morkovki-Online.apk` в корне (без вложенных каталогов и txt-файлов). У GitHub runner отладочный ключ меняется между сборками. Поэтому **для стабильного SHA-1** можно один раз создать отдельный тестовый debug keystore (alias `androiddebugkey`, пароль `android`, требуемый Gradle), затем сохранить его *base64-содержимое* как секрет GitHub Actions с точным именем `MORKOVKI_DEBUG_KEYSTORE_BASE64`. Пример для локального компьютера с JDK:
 ```bash
 mkdir -p signing
 keytool -genkeypair -storetype PKCS12 -keystore signing/android-debug.keystore -alias androiddebugkey -keyalg RSA -keysize 3072 -validity 3650 -dname "CN=Morkovki Android Debug,O=Morkovki" -storepass android -keypass android
 base64 -w0 signing/android-debug.keystore
 ```
-На Windows PowerShell содержимое base64: `[Convert]::ToBase64String([IO.File]::ReadAllBytes('signing/android-debug.keystore'))`. Добавить в GitHub: Settings > Secrets and variables > Actions > New repository secret. **Никогда не коммитьте keystore или base64 в исходники.** После установки секрета выполнить сборку, взять стабильный SHA-1 из её артефакта и зарегистрировать в Google Cloud. Для опубликованного приложения понадобится отдельный защищённый release key.
+На Windows PowerShell содержимое base64: `[Convert]::ToBase64String([IO.File]::ReadAllBytes('signing/android-debug.keystore'))`. Добавить в GitHub: Settings > Secrets and variables > Actions > New repository secret. **Никогда не коммитьте keystore или base64 в исходники.** После установки секрета выполнить сборку, взять стабильный SHA-1 из журнала шага **Report APK signing fingerprint** и зарегистрировать в Google Cloud. Для опубликованного приложения понадобится отдельный защищённый release key.
 
 
 ## Android 1.8.6 — исправление кнопки «Добавить в друзья»
@@ -68,3 +68,7 @@ base64 -w0 signing/android-debug.keystore
 ## Исправление мобильного интерфейса 1.8.8
 
 Новая Android-надстройка для сайта v67: «+» располагается справа от вкладок друзей («Ожидание»), добавлена видимая кнопка «Назад к разделам» для списков, голосовые сообщения записываются при удержании кнопки отправки 550 мс. При коротком касании отправляется только текст. Перед отправкой голосового показывается проигрыватель и кнопки «Отмена» / «Отправить». Используется прежний сайт `/api/messages/attachments` (10 МБ), HTTPS, разрешение микрофона и R2. Также исправлен Android Back: вызывается обработчик текущего документа, не только iframe. Нужен серверный патч v67 для воспроизведения голосовых непосредственно в чатах. Google OAuth, keystore и проверка обновлений не изменялись.
+
+## Упрощённое скачивание APK
+
+В GitHub Actions откройте успешную сборку и скачайте артефакт `Morkovki-Online-APK`. GitHub упаковывает артефакты в ZIP, но внутри теперь **один файл `Morkovki-Online.apk` непосредственно в корне** — без дерева `app/build/outputs/apk/debug/`. SHA-1 доступен в журнале сборки, а не в архиве. Постоянный секрет подписи не меняется.
