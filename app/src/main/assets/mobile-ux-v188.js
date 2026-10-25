@@ -26,3 +26,67 @@ send.addEventListener("contextmenu",function(e){if(mobile())e.preventDefault()})
 send.addEventListener("click",function(e){if(Date.now()<blocked){e.preventDefault();e.stopImmediatePropagation()}},true);
 document.getElementById("messageForm").addEventListener("submit",function(e){if(Date.now()<blocked){e.preventDefault();e.stopImmediatePropagation()}},true);
 })();
+
+
+/* Android 1.9.0: compatibility with server prealpha v0.0.2.
+ * The website owns account state and attachments; Android only adds secure,
+ * same-origin audio playback and removes redundant section back buttons.
+ */
+(function () {
+  "use strict";
+  if (window.__morkovkiServerV002Compat) return;
+  if (!document.getElementById("appShell")) return;
+  window.__morkovkiServerV002Compat = true;
+
+  var style = document.createElement("style");
+  style.id = "morkovki-v002-android-audio-style";
+  style.textContent = ".morkovki-android-inline-audio{display:block;max-width:100%;width:min(290px,100%);height:48px;margin:8px 0 3px}" +
+    "@media(max-width:720px){.morkovki-section-back{display:none!important}}";
+  document.head.appendChild(style);
+
+  var queued = false;
+  function hasNativeBack() {
+    return ["friendsBackBtn", "messagesBackBtn", "groupsBackBtn"].some(function (id) {
+      return !!document.getElementById(id);
+    });
+  }
+
+  function enhanceAudio() {
+    queued = false;
+    // v0.0.2 has native back controls. Remove fallback duplicates only if present.
+    if (hasNativeBack()) {
+      document.querySelectorAll(".morkovki-section-back").forEach(function (button) {
+        button.remove();
+      });
+    }
+    document.querySelectorAll("a.message-attachment").forEach(function (anchor) {
+      if (anchor.dataset.morkovkiAndroidAudio === "checked") return;
+      anchor.dataset.morkovkiAndroidAudio = "checked";
+      var label = anchor.querySelector(".attachment-card-name");
+      var fileName = ((label ? label.textContent : anchor.textContent) || "").trim();
+      if (!/\.(?:webm|ogg|opus|m4a|mp3|wav|aac|mp4)$/i.test(fileName)) return;
+      var uri;
+      try { uri = new URL(anchor.href, document.location.href); } catch (_) { return; }
+      if (uri.origin !== document.location.origin ||
+          !/^\/api\/messages\/attachments\/[A-Za-z0-9._-]+$/.test(uri.pathname)) return;
+      var parent = anchor.parentElement;
+      if (!parent || parent.querySelector("audio")) return;
+      var audio = document.createElement("audio");
+      audio.className = "morkovki-android-inline-audio";
+      audio.controls = true;
+      audio.preload = "none";
+      audio.src = uri.href;
+      audio.setAttribute("aria-label", "Воспроизвести " + fileName);
+      anchor.insertAdjacentElement("afterend", audio);
+    });
+  }
+
+  function schedule() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(enhanceAudio);
+  }
+  var observer = new MutationObserver(schedule);
+  observer.observe(document.body, { childList: true, subtree: true });
+  schedule();
+})();
