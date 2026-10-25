@@ -2,6 +2,7 @@ package ru.morkovki.chat;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -58,6 +59,8 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.io.File;
+import java.net.URL;
+import javax.net.ssl.HttpsURLConnection;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -79,6 +82,7 @@ public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 4207;
     private static final int MEDIA_PERMISSION_REQUEST = 4208;
     private static final int DOWNLOAD_PERMISSION_REQUEST = 4209;
+    private static final long UPDATE_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000;
 
     private WebView webView;
     private Button googleLoginButton;
@@ -178,7 +182,7 @@ public final class MainActivity extends Activity {
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
             settings.setDefaultTextEncodingName("UTF-8");
-            settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
             settings.setLoadWithOverviewMode(false);
             settings.setUseWideViewPort(false);
             settings.setSupportZoom(false);
@@ -192,7 +196,7 @@ public final class MainActivity extends Activity {
             settings.setMediaPlaybackRequiresUserGesture(true);
             settings.setSupportMultipleWindows(false);
             CookieManager.getInstance().setAcceptCookie(true);
-            webView.clearCache(true);
+            // Keep hashed CSS/JS cached: clearing on every launch wastes traffic on Redmi Note 14S.
 
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
@@ -271,6 +275,7 @@ public final class MainActivity extends Activity {
                 public void onPageFinished(WebView view, String url) {
                     updateResponsivePage();
                     installFriendsMobileFix();
+                    installAndroidUi();
                     updateLoginButtonVisibility();
                     CookieManager.getInstance().flush();
                     if (pendingSharedText != null && isSiteLoaded()) {
@@ -280,6 +285,7 @@ public final class MainActivity extends Activity {
             });
 
             webView.loadUrl(START_URL);
+            checkForUpdates(false);
         } catch (RuntimeException exception) {
             showLaunchError();
         }
@@ -305,6 +311,104 @@ public final class MainActivity extends Activity {
         } catch (IOException error) {
             Log.w("MorkovkiUI", "Friends mobile fix asset is unavailable", error);
         }
+    }
+
+
+    private void installAndroidUi() {
+        if (webView == null || !isSiteLoaded()) return;
+        try (InputStream input = getAssets().open("android-ui.js");
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] bytes = new byte[4096];
+            int count;
+            while ((count = input.read(bytes)) != -1) output.write(bytes, 0, count);
+            webView.evaluateJavascript(new String(output.toByteArray(), StandardCharsets.UTF_8), null);
+        } catch (IOException error) {
+            Log.w("MorkovkiUI", "Android navigation helper unavailable", error);
+        }
+    }
+
+    /**
+     * Updates are announced by a public HTTPS JSON file hosted on our own domain.
+     * No silent installation: Android/HyperOS always asks the user to approve sideloaded APKs.
+     */
+    private void checkForUpdates(boolean requestedByUser) {
+        if (!IS_HTTPS_SITE) {
+            if (requestedByUser) Toast.makeText(this, "Обновления доступны только в HTTPS-версии.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (!requestedByUser) {
+            long last = getPreferences(MODE_PRIVATE).getLong("last_update_check", 0);
+            if (last > 0 && now - last < UPDATE_CHECK_INTERVAL_MS && now >= last) return;
+        }
+        getPreferences(MODE_PRIVATE).edit().putLong("last_update_check", now).apply();
+        new Thread(() -> {
+            String error = "Не удалось проверить обновления. Попробуйте позже.";
+            HttpsURLConnection connection = null;
+            try {
+                URL manifestUrl = new URL(BuildConfig.SITE_URL + "android/update.json");
+                connection = (HttpsURLConnection) manifestUrl.openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                connection.setInstanceFollowRedirects(false);
+                connection.setRequestProperty("Accept", "application/json");
+                int status = connection.getResponseCode();
+                if (status == 404) {
+                    error = "Обновления пока не опубликованы на сервере.";
+                } else if (status == 200) {
+                    try (InputStream stream = connection.getInputStream();
+                         ByteArrayOutputStream data = new ByteArrayOutputStream()) {
+                        byte[] buffer = new byte[2048];
+                        int n;
+                        while ((n = stream.read(buffer)) != -1) {
+                            if (data.size() + n > 16384) throw new IOException("Manifest too large");
+                            data.write(buffer, 0, n);
+                        }
+                        JSONObject json = new JSONObject(data.toString("UTF-8"));
+                        int newVersion = json.getInt("versionCode");
+                        if (newVersion <= BuildConfig.VERSION_CODE) {
+                            if (requestedByUser) runOnUiThread(() ->
+                                    Toast.makeText(this, "У вас актуальная версия " + BuildConfig.VERSION_NAME, Toast.LENGTH_LONG).show());
+                            return;
+                        }
+                        String versionName = json.optString("versionName", "");
+                        String rawUrl = json.getString("apkUrl");
+                        Uri apk = Uri.parse(rawUrl);
+                        String path = apk.getEncodedPath();
+                        if (!isTrustedAppUri(apk) || path == null ||
+                                !path.matches("/android/[A-Za-z0-9._-]+\\.apk") ||
+                                apk.getUserInfo() != null || apk.getQuery() != null || apk.getFragment() != null) {
+                            throw new IOException("Untrusted update URL");
+                        }
+                        String description = json.optString("notes", "Исправления и улучшения приложения.");
+                        if (description.length() > 300) description = description.substring(0, 300);
+                        String displayVersion = versionName.matches("[A-Za-z0-9._-]{1,30}") ? versionName : String.valueOf(newVersion);
+                        final String notes = description;
+                        runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed()) return;
+                            new AlertDialog.Builder(this)
+                                .setTitle("Доступно обновление " + displayVersion)
+                                .setMessage(notes + "\n\nAPK откроется в браузере. Установку подтвердите в Android.")
+                                .setNegativeButton("Позже", null)
+                                .setPositiveButton("Скачать", (dialog, which) -> openExternalUri(apk))
+                                .show();
+                        });
+                        return;
+                    }
+                } else {
+                    error = "Сервер обновлений ответил кодом " + status + ".";
+                }
+            } catch (Exception exception) {
+                Log.w("MorkovkiUpdate", "Update check failed", exception);
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+            final String message = error;
+            if (requestedByUser) runOnUiThread(() -> {
+                if (!isFinishing() && !isDestroyed())
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            });
+        }, "morkovki-update-check").start();
     }
 
     private void updateLoginButtonVisibility() {
@@ -683,6 +787,11 @@ public final class MainActivity extends Activity {
     }
 
     private final class MorkovkiAndroidBridge {
+        @JavascriptInterface
+        public void checkForUpdates() {
+            runOnUiThread(() -> MainActivity.this.checkForUpdates(true));
+        }
+
         @JavascriptInterface
         public boolean isAvailable() {
             return isSiteLoaded();
