@@ -49,6 +49,8 @@ jobs:
           else
             echo "::warning::No MORKOVKI_DEBUG_KEYSTORE_BASE64 secret. APK will be signed with an ephemeral GitHub runner key; register the new SHA-1 for this APK or configure a stable key."
           fi
+      - name: Test Direct IP auth checker (offline)
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Validate Android version documentation
         shell: bash
         run: |

@@ -38,15 +38,10 @@ jobs:
               raise SystemExit('Require public IPv4 HTTPS origin, e.g. https://212.220.99.132/')
           print('Public HTTPS IPv4 origin validated')
           PY
-      - name: Check trusted IP TLS and direct chat route
-        shell: bash
-        run: |
-          set -euo pipefail
-          status="$(curl --proto '=https' --max-time 20 --silent --show-error             --output /dev/null --write-out '%{http_code}' "${DIRECT_IP_ORIGIN}chat")"
-          if [ "$status" != "200" ]; then
-            echo "::error::HTTPS direct IP /chat returned $status. Check trusted IP certificate, port, path and redirects."
-            exit 1
-          fi
+      - name: Test direct IP authentication preflight locally
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify live direct HTTPS auth routes (read-only)
+        run: python3 scripts/check_direct_ip_auth.py --origin "$DIRECT_IP_ORIGIN"
       - name: Validate Android scripts
         run: |
           node --check app/src/main/assets/mobile-ux-v188.js
