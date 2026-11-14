@@ -1,15 +1,27 @@
-Морковки на связи — настройка Android-сборки 1.8.1
+Морковки Онлайн — Android 1.9.0
+=================================
 
-GitHub Actions создаёт:
-1) Morkovki-IP-HTTP-Test-Debug-APK: http://212.220.99.132:5761/
-2) Morkovki-Website-HTTPS-Debug-APK: https://morkovkionline.ru/
+Текущая сборка из GitHub Actions:
+- Репозиторий: https://github.com/ShamaNGameS/morkovki-android
+- Workflow: Actions → Android APK - Google HTTPS
+- Артефакт: Morkovki-Online-APK (внутри Morkovki-Online.apk)
+- Сайт: https://morkovkionline.ru/chat
+- Android: versionName 1.9.0, versionCode 23
+- Совместимость по исходникам: сервер prealpha v0.0.2 (см. README).
+  Версия установленного сервера подтверждена только документацией репозитория.
 
-Из PowerShell:
-.\gradlew.bat --no-daemon assembleDebug -PsiteUrl=http://212.220.99.132:5761/
-.\gradlew.bat --no-daemon assembleDebug -PsiteUrl=https://morkovkionline.ru/
+Локальная сборка (Windows PowerShell из корня репозитория):
+.\gradlew.bat --no-daemon assembleDebug "-PsiteUrl=https://morkovkionline.ru/"
 
-По умолчанию выбран HTTPS-сайт; произвольные HTTP-адреса запрещены. Для IP-сборки отключён нативный Google Sign-in и мост JavaScript-Android.
+Результат:
+app\build\outputs\apk\debug\app-debug.apk
 
-ВНИМАНИЕ: HTTP не шифрует трафик, поэтому не передавайте реальные пароли и личные сообщения. Порт должен отдавать HTML-интерфейс для WebView, а не только JSON.
+Публикуемый workflow собирает только HTTPS-вариант.
+Старые инструкции про IP/HTTP-сборки 1.8.1 больше НЕ относятся к
+текущему GitHub Actions. Для авторизации и личных сообщений нужен HTTPS.
 
-APK находится в app\build\outputs\apk\debug\app-debug.apk.
+Google-входу необходимы корректные Android OAuth package/SHA-1,
+Web Client ID и серверная обработка токена. Для обновлений поверх
+старого APK необходимо использовать один и тот же ключ подписи:
+секрет MORKOVKI_DEBUG_KEYSTORE_BASE64 (не хранить ключ в GitHub-коде).
+Публикация APK на сервере автоматически не выполняется.

@@ -49,6 +49,25 @@ jobs:
           else
             echo "::warning::No MORKOVKI_DEBUG_KEYSTORE_BASE64 secret. APK will be signed with an ephemeral GitHub runner key; register the new SHA-1 for this APK or configure a stable key."
           fi
+      - name: Validate Android version documentation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle = Path('app/build.gradle').read_text(encoding='utf-8')
+          readme = Path('README.md').read_text(encoding='utf-8')
+          instructions = Path('ANDROID-URL-RU.txt').read_text(encoding='utf-8')
+          version = re.search(r"(?m)^\s*versionName\s+'([^']+)'", gradle)
+          code = re.search(r"(?m)^\s*versionCode\s+(\d+)", gradle)
+          assert version and code, 'Missing Android version metadata'
+          name = version.group(1)
+          assert readme.startswith(f'# Морковки Онлайн — Android {name}\n'), 'README version mismatch'
+          assert f'**versionCode:** {code.group(1)}' in readme, 'README versionCode mismatch'
+          assert instructions.startswith(f'Морковки Онлайн — Android {name}\n'), 'Android instructions version mismatch'
+          print(f'Android version documentation OK: {name} / {code.group(1)}')
+          PY
       - name: Assemble Google HTTPS APK
         run: ./gradlew --no-daemon assembleDebug "-PsiteUrl=https://morkovkionline.ru/"
       - name: Report APK signing fingerprint
