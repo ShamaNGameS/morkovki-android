@@ -6,6 +6,8 @@ plugins {
 
 def defaultSiteUrl = 'https://morkovkionline.ru/'
 def configuredSiteUrl = providers.gradleProperty('siteUrl').orElse(defaultSiteUrl).get().trim()
+// Direct-IP variant requires an HTTPS IPv4 address, not a domain or plaintext HTTP.
+def directIpOnly = providers.gradleProperty('directIpOnly').orElse('false').get().equalsIgnoreCase('true')
 def parsedSiteUrl
 try {
     parsedSiteUrl = new URI(configuredSiteUrl)
@@ -23,6 +25,16 @@ if (!(isHttpsSite || isHttpIpTest)
         || parsedSiteUrl.fragment
         || (parsedSiteUrl.path && parsedSiteUrl.path != '/')) {
     throw new GradleException('siteUrl must be an HTTPS origin, or the test address http://212.220.99.132:5761/')
+}
+if (directIpOnly) {
+    def host = parsedSiteUrl.host ?: ''
+    def parts = host.tokenize('.')
+    def validIpv4 = host.count('.') == 3 && parts.size() == 4 && parts.every {
+        it ==~ /[0-9]{1,3}/ && it.toInteger() <= 255
+    }
+    if (!isHttpsSite || !validIpv4) {
+        throw new GradleException('Direct IP APK requires HTTPS IPv4 origin, e.g. -PsiteUrl=https://212.220.99.132/')
+    }
 }
 def siteUrl = "${parsedSiteUrl.scheme.toLowerCase(java.util.Locale.ROOT)}://${parsedSiteUrl.rawAuthority}/"
 def escapedSiteUrl = siteUrl.replace('\\', '\\\\').replace('"', '\\"')
@@ -44,6 +56,7 @@ android {
         versionCode 23
         versionName '1.9.0'
         buildConfigField 'String', 'SITE_URL', "\"${escapedSiteUrl}\""
+        buildConfigField 'boolean', 'DIRECT_IP_MODE', directIpOnly.toString()
     }
 
     compileOptions {

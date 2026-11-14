@@ -76,6 +76,7 @@ public final class MainActivity extends Activity {
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
     private static final Uri SITE_URI = Uri.parse(BuildConfig.SITE_URL);
     private static final String SITE_HOST = SITE_URI.getHost();
+    private static final String WEBSITE_DOMAIN = "morkovkionline.ru";
     private static final boolean IS_HTTPS_SITE = "https".equalsIgnoreCase(SITE_URI.getScheme());
     private static final String START_URL = IS_HTTPS_SITE
             ? BuildConfig.SITE_URL + "chat" : BuildConfig.SITE_URL;
@@ -238,6 +239,10 @@ public final class MainActivity extends Activity {
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                     Uri uri = request.getUrl();
+                    // Direct-IP builds must not fetch the website's DNS hostname as fallback.
+                    if (BuildConfig.DIRECT_IP_MODE && isWebsiteDomain(uri)) {
+                        return blockedResponse();
+                    }
                     WebResourceResponse local = assetLoader.shouldInterceptRequest(uri);
                     if (local != null) {
                         return local;
@@ -249,6 +254,12 @@ public final class MainActivity extends Activity {
                 @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     Uri uri = request.getUrl();
+                    if (BuildConfig.DIRECT_IP_MODE && isWebsiteDomain(uri)) {
+                        Toast.makeText(MainActivity.this,
+                                "Сервер пытается перейти на домен. Для Direct IP исправьте ссылки сервера.",
+                                Toast.LENGTH_LONG).show();
+                        return true;
+                    }
                     if (isTrustedAppUri(uri)) {
                         return false;
                     }
@@ -455,6 +466,12 @@ public final class MainActivity extends Activity {
             CookieManager.getInstance().flush();
         }
         super.onPause();
+    }
+
+    private boolean isWebsiteDomain(Uri uri) {
+        if (uri == null || uri.getHost() == null) return false;
+        String host = uri.getHost().toLowerCase(java.util.Locale.ROOT);
+        return WEBSITE_DOMAIN.equals(host) || host.endsWith("." + WEBSITE_DOMAIN);
     }
 
     private boolean isTrustedAppUri(Uri uri) {
